@@ -71,7 +71,8 @@ namespace wloutput
             Console.Error.WriteLine($"smallest diagonal: {minppcm}ppcm");
             for (int i = 0; i < setup.Count; i++)
             {
-                decimal zoom = Math.Round((decimal)setup[i].Geometry.Ppcm / minppcm, 2);
+                // round to nearest .5 factor
+                decimal zoom = Math.Round((decimal)setup[i].Geometry.Ppcm / minppcm * 2) / 2;
                 string zoomstr = zoom.ToString(CultureInfo.InvariantCulture);
                 string filter = "nearest";
                 if (zoomstr.Contains('.'))

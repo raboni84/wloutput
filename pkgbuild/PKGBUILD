@@ -1,5 +1,5 @@
 pkgname=wloutput
-pkgver=1
+pkgver=r1.2e89db6
 pkgrel=1
 pkgdesc="Best wayland output settings for connected displays"
 arch=('i686' 'x86_64')
@@ -32,7 +32,4 @@ package() {
     
   install -d "$pkgdir/usr/bin"
   ln -s "/opt/$pkgname/$pkgname" "$pkgdir/usr/bin/$pkgname"
-
-  install -D -m644 "$startdir/../LICENSE" \
-  "${pkgdir}/usr/share/licenses/${pkgname}/cc-by-nc-sa-4.0.txt"
 }

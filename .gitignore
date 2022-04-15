@@ -1,2 +1,4 @@
 bin/
 obj/
+pkgbuild/*
+!pkgbuild/PKGBUILD
