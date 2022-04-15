@@ -1,0 +1,3 @@
+[submodule "toolbelt"]
+	path = toolbelt
+	url = https://github.com/raboni84/toolbelt.git

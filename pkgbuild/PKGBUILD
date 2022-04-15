@@ -1,0 +1,38 @@
+pkgname=wloutput
+pkgver=1
+pkgrel=1
+pkgdesc="Best wayland output settings for connected displays"
+arch=('i686' 'x86_64')
+license=('CCPL:cc-by-nc-sa-4.0')
+depends=('dotnet-runtime')
+provides=($pkgname)
+conflicts=($pkgname)
+
+pkgver(){
+  cd $pkgname
+  printf "r%s.%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+prepare() {
+  if [[ ! -d $pkgname ]]; then
+    ln -s "$startdir/../src" $pkgname
+  fi
+}
+
+build() {
+  cd $pkgname
+  rm -rf bin/ obj/
+  dotnet build -c Release
+}
+
+package() {
+  cd $pkgname
+  install -d "$pkgdir/opt/$pkgname"
+  dotnet publish --no-build -c Release -o "$pkgdir/opt/$pkgname"
+    
+  install -d "$pkgdir/usr/bin"
+  ln -s "/opt/$pkgname/$pkgname" "$pkgdir/usr/bin/$pkgname"
+
+  install -D -m644 "$startdir/../LICENSE" \
+  "${pkgdir}/usr/share/licenses/${pkgname}/cc-by-nc-sa-4.0.txt"
+}
