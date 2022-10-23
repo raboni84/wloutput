@@ -20,7 +20,14 @@ namespace wloutput
             {
                 W = json.GetProperty("width").GetInt32();
                 H = json.GetProperty("height").GetInt32();
-                R = json.GetProperty("refresh").GetInt32();
+                try
+                {
+                    R = json.GetProperty("refresh").GetInt32();
+                }
+                catch (Exception)
+                {
+                    R = 0;
+                }
             }
             catch (Exception)
             {

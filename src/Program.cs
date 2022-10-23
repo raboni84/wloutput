@@ -5,7 +5,6 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using toolbelt;
 
 namespace wloutput
@@ -21,18 +20,37 @@ namespace wloutput
             FindBestSetupForAllScreens(setup);
             int width, height;
             FindBestScaleAndPositionForAllScreens(setup, out width, out height);
-            CropBackgroundImageForAllScreens(background, width, height, setup);
-
+            if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("DISPLAY")))
+                CropBackgroundImageForAllScreens(background, width, height, setup);
+            
             foreach (var elem in setup)
             {
-                Console.Error.WriteLine($"display \"{elem.Name}\" geometry {elem.Geometry.Wcm}cm {elem.Geometry.Hcm}cm {elem.Geometry.Ppcm}ppcm");
-                string cmd;
-                if (elem.Mode.R == 0)
-                    cmd = $"output \"{elem.Name}\" mode {elem.Mode.W}x{elem.Mode.H} pos {elem.Position.X} {elem.Position.Y} scale {elem.Scale} scale_filter {elem.ScaleFilter} bg \"{elem.Background}\" fill";
+                if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("DISPLAY")))
+                {
+                    Console.Error.WriteLine($"display \"{elem.Name}\" geometry {elem.Geometry.Wcm}cm {elem.Geometry.Hcm}cm {elem.Geometry.Ppcm}ppcm");
+                    string cmd;
+                    if (elem.Mode.R == 0)
+                        cmd = $"--output \"{elem.Name}\" --mode {elem.Mode.W}x{elem.Mode.H} --pos {elem.Position.X}x{elem.Position.Y} --scale {elem.Scale} --filter {elem.ScaleFilter} --rotate normal";
+                    else
+                        cmd = $"--output \"{elem.Name}\" --mode {elem.Mode.W}x{elem.Mode.H} --rate {elem.Mode.R / 1000} --pos {elem.Position.X}x{elem.Position.Y} --scale {elem.Scale} --filter {elem.ScaleFilter} --rotate normal";
+                    Console.Error.WriteLine(cmd);
+                    ShellUtils.RunShellAsync("xrandr", cmd, Console.OpenStandardError()).Await();
+                }
                 else
-                    cmd = $"output \"{elem.Name}\" mode {elem.Mode.W}x{elem.Mode.H}@{elem.Mode.R / 1000}Hz pos {elem.Position.X} {elem.Position.Y} scale {elem.Scale} scale_filter {elem.ScaleFilter} bg \"{elem.Background}\" fill";
-                Console.Error.WriteLine(cmd);
-                ShellUtils.RunShellAsync("swaymsg", cmd, Console.OpenStandardError()).Await();
+                {
+                    Console.Error.WriteLine($"display \"{elem.Name}\" geometry {elem.Geometry.Wcm}cm {elem.Geometry.Hcm}cm {elem.Geometry.Ppcm}ppcm");
+                    string cmd;
+                    if (elem.Mode.R == 0)
+                        cmd = $"output \"{elem.Name}\" mode {elem.Mode.W}x{elem.Mode.H} pos {elem.Position.X} {elem.Position.Y} scale {elem.Scale} scale_filter {elem.ScaleFilter} bg \"{elem.Background}\" fill";
+                    else
+                        cmd = $"output \"{elem.Name}\" mode {elem.Mode.W}x{elem.Mode.H}@{elem.Mode.R / 1000}Hz pos {elem.Position.X} {elem.Position.Y} scale {elem.Scale} scale_filter {elem.ScaleFilter} bg \"{elem.Background}\" fill";
+                    Console.Error.WriteLine(cmd);
+                    ShellUtils.RunShellAsync("swaymsg", cmd, Console.OpenStandardError()).Await();
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("DISPLAY")))
+            {
+                ShellUtils.RunShellAsync("nitrogen", $"--set-zoom-fill \"{background}\" --head=-1", Console.OpenStandardError()).Await();
             }
         }
 
@@ -76,12 +94,17 @@ namespace wloutput
             Console.Error.WriteLine($"smallest diagonal: {minppcm}ppcm");
             for (int i = 0; i < setup.Count; i++)
             {
-                // round to nearest integer
-                decimal zoom = Math.Round((decimal)setup[i].Geometry.Ppcm / minppcm);
-                decimal maxzoom = (decimal)setup[i].Geometry.Ppcm / 30;
-                if (maxzoom < zoom)
-                    zoom = maxzoom;
-                string zoomstr = zoom.ToString(CultureInfo.InvariantCulture);
+                // round to floor integer
+                //decimal zoom = (decimal)setup[i].Geometry.Ppcm / minppcm;
+                decimal zoom = 1;
+                if (minppcm != 0)
+                {
+                    zoom = Math.Round((decimal)setup[i].Geometry.Ppcm / minppcm * 4, MidpointRounding.AwayFromZero) / 4;
+                    decimal maxzoom = (decimal)setup[i].Geometry.Ppcm / 30;
+                    if (maxzoom < zoom)
+                        zoom = maxzoom;
+                }
+                string zoomstr = zoom.ToString("0.##", CultureInfo.InvariantCulture);
                 string filter = "nearest";
 
                 int screenWidth = (int)Math.Ceiling((decimal)setup[i].Mode.W / zoom);
@@ -134,76 +157,121 @@ namespace wloutput
                 }
             }
             */
-            string outputs = ShellUtils.RunShellTextAsync("swaymsg", "-t get_outputs -r").Await();
-            using (JsonDocument jdoc = JsonDocument.Parse(outputs))
+            if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("DISPLAY")))
             {
-                foreach (var output in jdoc.RootElement.EnumerateArray())
+                string outputs = ShellUtils.RunShellTextAsync("i3-msg", "-t get_outputs").Await();
+                using (JsonDocument jdoc = JsonDocument.Parse(outputs))
                 {
-                    string name = GetOutputName(output);
-                    //Rectangle rect = GetOutputDimensions(output);
-                    Mode[] modes = GetOutputModes(output);
-                    Mode matched = modes
-                        //.OrderByDescending(x => x.W)
-                        //.ThenByDescending(x => (decimal)x.W / (decimal)x.H)
-                        //.ThenByDescending(x => x.R)
-                        .FirstOrDefault();
-                    Geometry geom = GetOutputGeometry(name, matched);
-                    Screen screen = new Screen(name, matched, geom, new Rectangle(), null, null, null);
-                    setup.Add(screen);
+                    foreach (var output in jdoc.RootElement.EnumerateArray())
+                    {
+                        bool active = GetOutputActive(output);
+                        if (!active)
+                            continue;
+                        string name = GetOutputName(output);
+                        //Rectangle rect = GetOutputDimensions(output);
+                        Mode[] modes = GetOutputModes(output);
+                        Mode matched = modes
+                            //.OrderByDescending(x => x.W)
+                            //.ThenByDescending(x => (decimal)x.W / (decimal)x.H)
+                            //.ThenByDescending(x => x.R)
+                            .FirstOrDefault();
+                        Geometry geom = GetOutputGeometry(name, matched);
+                        Screen screen = new Screen(name, matched, geom, new Rectangle(), null, null, null);
+                        setup.Add(screen);
+                    }
+                }
+            }
+            else
+            {
+                string outputs = ShellUtils.RunShellTextAsync("swaymsg", "-t get_outputs -r").Await();
+                using (JsonDocument jdoc = JsonDocument.Parse(outputs))
+                {
+                    foreach (var output in jdoc.RootElement.EnumerateArray())
+                    {
+                        bool active = GetOutputActive(output);
+                        if (!active)
+                            continue;
+                        string name = GetOutputName(output);
+                        //Rectangle rect = GetOutputDimensions(output);
+                        Mode[] modes = GetOutputModes(output);
+                        Mode matched = modes
+                            //.OrderByDescending(x => x.W)
+                            //.ThenByDescending(x => (decimal)x.W / (decimal)x.H)
+                            //.ThenByDescending(x => x.R)
+                            .FirstOrDefault();
+                        Geometry geom = GetOutputGeometry(name, matched);
+                        Screen screen = new Screen(name, matched, geom, new Rectangle(), null, null, null);
+                        setup.Add(screen);
+                    }
                 }
             }
         }
 
-    private static Geometry GetOutputGeometry(string name, Mode mode)
-    {
-        string path = Directory.EnumerateDirectories("/sys/class/drm", $"card*-{name}*").FirstOrDefault();
-        if (path != null)
+        private static Geometry GetOutputGeometry(string name, Mode mode)
         {
-            byte[] data = File.ReadAllBytes($"{path}/edid");
-            byte horizontal = data[21];
-            byte vertical = data[22];
-            return new Geometry(horizontal, vertical, mode);
+            string path = Directory.EnumerateDirectories("/sys/class/drm", $"card*-{name}*").FirstOrDefault();
+            if (path != null)
+            {
+                byte[] data = File.ReadAllBytes($"{path}/edid");
+                byte horizontal = data[21];
+                byte vertical = data[22];
+                return new Geometry(horizontal, vertical, mode);
+            }
+            return new Geometry(0, 0, 0);
         }
-        return new Geometry(0, 0, 0);
-    }
 
-    private static Mode[] GetOutputModes(JsonElement output)
-    {
-        List<Mode> modes = new List<Mode>();
-        JsonElement elem;
-        if (!output.TryGetProperty("modes", out elem))
+        private static Mode[] GetOutputModes(JsonElement output)
+        {
+            List<Mode> modes = new List<Mode>();
+            JsonElement elem;
+            if (output.TryGetProperty("modes", out elem))
+            {
+                foreach (var iter in elem.EnumerateArray())
+                {
+                    modes.Add(new Mode(iter));
+                }
+                return modes.ToArray();
+            }
+            if (output.TryGetProperty("rect", out elem))
+            {
+                modes.Add(new Mode(elem));
+                return modes.ToArray();
+            }
             throw new InvalidDataException("modes");
-        foreach (var iter in elem.EnumerateArray())
-        {
-            modes.Add(new Mode(iter));
         }
-        return modes.ToArray();
-    }
 
-    private static Rectangle GetOutputDimensions(JsonElement output)
-    {
-        JsonElement elem;
-        if (!output.TryGetProperty("rect", out elem))
-            throw new InvalidDataException("rect");
-        return new Rectangle(elem);
-    }
+        private static Rectangle GetOutputDimensions(JsonElement output)
+        {
+            JsonElement elem;
+            if (!output.TryGetProperty("rect", out elem))
+                throw new InvalidDataException("rect");
+            return new Rectangle(elem);
+        }
 
-    private static string GetOutputName(JsonElement output)
-    {
-        JsonElement elem;
-        if (!output.TryGetProperty("name", out elem))
-            throw new InvalidDataException("name");
-        return elem.GetString();
-    }
+        private static bool GetOutputActive(JsonElement output)
+        {
+            JsonElement elem;
+            if (!output.TryGetProperty("active", out elem))
+                throw new InvalidDataException("active");
+            return elem.GetBoolean();
+        }
 
-    private static IEnumerable<T> Shuffle<T>(IEnumerable<T> list)
-    {
-        var r = new Random();
-        var shuffledList =
-            list.Select(x => new { Number = r.Next(), Item = x })
-                .OrderBy(x => x.Number)
-                .Select(x => x.Item);
-        return shuffledList.ToList();
+        private static string GetOutputName(JsonElement output)
+        {
+            JsonElement elem;
+            if (!output.TryGetProperty("name", out elem))
+                throw new InvalidDataException("name");
+            return elem.GetString();
+        }
+
+        private static IEnumerable<T> Shuffle<T>(IEnumerable<T> list)
+        {
+            var r = new Random();
+            var shuffledList =
+                list.Select(x => new { Number = r.Next(), Item = x })
+                    .OrderBy(x => x.Number)
+                    .Select(x => x.Item);
+            return shuffledList.ToList();
+        }
     }
-}
 }
