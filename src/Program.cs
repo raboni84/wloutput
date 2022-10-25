@@ -22,7 +22,7 @@ namespace wloutput
             FindBestScaleAndPositionForAllScreens(setup, out width, out height);
             if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("DISPLAY")))
                 CropBackgroundImageForAllScreens(background, width, height, setup);
-            
+
             foreach (var elem in setup)
             {
                 if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("DISPLAY")))
@@ -210,12 +210,24 @@ namespace wloutput
         private static Geometry GetOutputGeometry(string name, Mode mode)
         {
             string path = Directory.EnumerateDirectories("/sys/class/drm", $"card*-{name}*").FirstOrDefault();
+            if (path == null)
+            {
+                name = name.Replace("DisplayPort", "DP", StringComparison.OrdinalIgnoreCase);
+                path = Directory.EnumerateDirectories("/sys/class/drm", $"card*-{name}*").FirstOrDefault();
+            }
             if (path != null)
             {
-                byte[] data = File.ReadAllBytes($"{path}/edid");
-                byte horizontal = data[21];
-                byte vertical = data[22];
-                return new Geometry(horizontal, vertical, mode);
+                try
+                {
+                    byte[] data = File.ReadAllBytes($"{path}/edid");
+                    byte horizontal = data[21];
+                    byte vertical = data[22];
+                    return new Geometry(horizontal, vertical, mode);
+                }
+                catch (Exception)
+                {
+                    return new Geometry(0, 0, 0);
+                }
             }
             return new Geometry(0, 0, 0);
         }
