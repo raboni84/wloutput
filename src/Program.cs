@@ -4,6 +4,7 @@ using System.Drawing;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using toolbelt;
 
@@ -11,7 +12,11 @@ namespace wloutput
 {
     static class Program
     {
-        static readonly string ConfigFilename = $"{Environment.GetEnvironmentVariable("HOME")}/.config/wloutput.json";
+        [DllImport("libX11")]
+        public static extern IntPtr XOpenDisplay(string display_name);
+        
+        static readonly string X11ConfigFilename = $"{Environment.GetEnvironmentVariable("HOME")}/.config/wloutput.x11.json";
+        static readonly string WaylandConfigFilename = $"{Environment.GetEnvironmentVariable("HOME")}/.config/wloutput.wl.json";
 
         public static void Main(string[] args)
         {
@@ -23,7 +28,12 @@ namespace wloutput
             int width, height;
             FindBestScaleAndPositionForAllScreens(setup, out width, out height);
             
-            Config config = ConfigParser.ParseJsonConfigFile<Config>(ConfigFilename);
+            Config config;
+            if (IsX11Environment())
+                config = ConfigParser.ParseJsonConfigFile<Config>(X11ConfigFilename);
+            else
+                config = ConfigParser.ParseJsonConfigFile<Config>(WaylandConfigFilename);
+            
             if (config == null)
                 config = new Config();
             if (config.Screens == null)
@@ -36,14 +46,17 @@ namespace wloutput
                 else
                     elem.CopyFrom(sel);
             }
-            ConfigParser.WriteJsonConfigFile<Config>(config, ConfigFilename);
+            if (IsX11Environment())
+                ConfigParser.WriteJsonConfigFile<Config>(config, X11ConfigFilename);
+            else
+                ConfigParser.WriteJsonConfigFile<Config>(config, WaylandConfigFilename);
 
-            if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("DISPLAY")))
+            if (!IsX11Environment())
                 CropBackgroundImageForAllScreens(background, width, height, setup);
             
             foreach (var elem in setup)
             {
-                if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("DISPLAY")))
+                if (IsX11Environment())
                 {
                     Console.Error.WriteLine($"display \"{elem.Name}\" geometry {elem.Geometry.Wcm}cm {elem.Geometry.Hcm}cm {elem.Geometry.Ppcm}ppcm");
                     string cmd;
@@ -66,9 +79,23 @@ namespace wloutput
                     ShellUtils.RunShellAsync("swaymsg", cmd, outputStream: Console.OpenStandardError()).Await();
                 }
             }
-            if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("DISPLAY")))
+            if (IsX11Environment())
             {
                 ShellUtils.RunShellAsync("nitrogen", $"--set-zoom-fill \"{background}\" --head=-1", outputStream: Console.OpenStandardError()).Await();
+            }
+        }
+
+        private static bool IsX11Environment()
+        {
+            try
+            {
+                string name = Environment.GetEnvironmentVariable("DISPLAY");
+                IntPtr display = XOpenDisplay(name);
+                return display != IntPtr.Zero;
+            }
+            catch (Exception)
+            {
+                return false;
             }
         }
 
@@ -175,7 +202,7 @@ namespace wloutput
                 }
             }
             */
-            if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("DISPLAY")))
+            if (IsX11Environment())
             {
                 string outputs = ShellUtils.RunShellTextAsync("i3-msg", "-t get_outputs").Await();
                 using (JsonDocument jdoc = JsonDocument.Parse(outputs))
