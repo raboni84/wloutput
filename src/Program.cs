@@ -34,7 +34,7 @@ namespace wloutput
                     else
                         cmd = $"--output \"{elem.Name}\" --mode {elem.Mode.W}x{elem.Mode.H} --rate {elem.Mode.R / 1000} --pos {elem.Position.X}x{elem.Position.Y} --scale {elem.Scale} --filter {elem.ScaleFilter} --rotate normal";
                     Console.Error.WriteLine(cmd);
-                    ShellUtils.RunShellAsync("xrandr", cmd, Console.OpenStandardError()).Await();
+                    ShellUtils.RunShellAsync("xrandr", cmd, outputStream: Console.OpenStandardError()).Await();
                 }
                 else
                 {
@@ -45,12 +45,12 @@ namespace wloutput
                     else
                         cmd = $"output \"{elem.Name}\" mode {elem.Mode.W}x{elem.Mode.H}@{elem.Mode.R / 1000}Hz pos {elem.Position.X} {elem.Position.Y} scale {elem.Scale} scale_filter {elem.ScaleFilter} bg \"{elem.Background}\" fill";
                     Console.Error.WriteLine(cmd);
-                    ShellUtils.RunShellAsync("swaymsg", cmd, Console.OpenStandardError()).Await();
+                    ShellUtils.RunShellAsync("swaymsg", cmd, outputStream: Console.OpenStandardError()).Await();
                 }
             }
             if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("DISPLAY")))
             {
-                ShellUtils.RunShellAsync("nitrogen", $"--set-zoom-fill \"{background}\" --head=-1", Console.OpenStandardError()).Await();
+                ShellUtils.RunShellAsync("nitrogen", $"--set-zoom-fill \"{background}\" --head=-1", outputStream: Console.OpenStandardError()).Await();
             }
         }
 
