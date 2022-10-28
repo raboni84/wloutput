@@ -23,5 +23,16 @@ namespace wloutput
             ScaleFilter = scaleFilter;
             Background = background;
         }
+
+        public void CopyFrom(Screen other)
+        {
+            Name = other.Name;
+            Mode = other.Mode;
+            Geometry = other.Geometry;
+            Position = other.Position;
+            Scale = other.Scale;
+            ScaleFilter = other.ScaleFilter;
+            Background = other.Background;
+        }
     }
 }

@@ -11,6 +11,8 @@ namespace wloutput
 {
     static class Program
     {
+        static readonly string ConfigFilename = $"{Environment.GetEnvironmentVariable("HOME")}/.config/wloutput.json";
+
         public static void Main(string[] args)
         {
             string background = FindBackgroundImage();
@@ -20,9 +22,25 @@ namespace wloutput
             FindBestSetupForAllScreens(setup);
             int width, height;
             FindBestScaleAndPositionForAllScreens(setup, out width, out height);
+            
+            Config config = ConfigParser.ParseJsonConfigFile<Config>(ConfigFilename);
+            if (config == null)
+                config = new Config();
+            if (config.Screens == null)
+                config.Screens = new List<Screen>();
+            foreach (var elem in setup)
+            {
+                Screen sel = config.Screens.FirstOrDefault(x => x.Name == elem.Name);
+                if (sel == null)
+                    config.Screens.Add(elem);
+                else
+                    elem.CopyFrom(sel);
+            }
+            ConfigParser.WriteJsonConfigFile<Config>(config, ConfigFilename);
+
             if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("DISPLAY")))
                 CropBackgroundImageForAllScreens(background, width, height, setup);
-
+            
             foreach (var elem in setup)
             {
                 if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("DISPLAY")))
