@@ -1,5 +1,5 @@
 pkgname=wloutput
-pkgver=r9.3755b18
+pkgver=r10.1566cc4
 pkgrel=1
 pkgdesc="Best wayland output settings for connected displays"
 arch=('i686' 'x86_64')

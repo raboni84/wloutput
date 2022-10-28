@@ -25,8 +25,7 @@ namespace wloutput
 
             List<Screen> setup = new List<Screen>();
             FindBestSetupForAllScreens(setup);
-            int width, height;
-            FindBestScaleAndPositionForAllScreens(setup, out width, out height);
+            FindBestScaleAndPositionForAllScreens(setup);
             
             Config config;
             if (IsX11Environment())
@@ -51,8 +50,7 @@ namespace wloutput
             else
                 ConfigParser.WriteJsonConfigFile<Config>(config, WaylandConfigFilename);
 
-            if (!IsX11Environment())
-                CropBackgroundImageForAllScreens(background, width, height, setup);
+            CropBackgroundImageForAllScreens(background, setup);
             
             foreach (var elem in setup)
             {
@@ -81,7 +79,13 @@ namespace wloutput
             }
             if (IsX11Environment())
             {
-                ShellUtils.RunShellAsync("nitrogen", $"--set-zoom-fill \"{background}\" --head=-1", outputStream: Console.OpenStandardError()).Await();
+                string cmd = "-onroot";
+                foreach (var elem in setup)
+                {
+                    cmd += $" -at {elem.Position.X},{elem.Position.Y} \"{elem.Background}\"";
+                }
+                Console.Error.WriteLine(cmd);
+                ShellUtils.RunShellAsync("xloadimage", cmd, outputStream: Console.OpenStandardError()).Await();
             }
         }
 
@@ -89,8 +93,7 @@ namespace wloutput
         {
             try
             {
-                string name = Environment.GetEnvironmentVariable("DISPLAY");
-                IntPtr display = XOpenDisplay(name);
+                IntPtr display = XOpenDisplay(null);
                 return display != IntPtr.Zero;
             }
             catch (Exception)
@@ -99,8 +102,10 @@ namespace wloutput
             }
         }
 
-        private static void CropBackgroundImageForAllScreens(string background, int width, int height, List<Screen> setup)
+        private static void CropBackgroundImageForAllScreens(string background, List<Screen> setup)
         {
+            int width = setup.Max(x => x.Position.X + x.Position.W);
+            int height = setup.Max(x => x.Position.Y + x.Position.H);
             DirectoryInfo di = Directory.CreateDirectory("/tmp/wloutput");
             using (Bitmap img = new Bitmap(background))
             {
@@ -131,7 +136,7 @@ namespace wloutput
             }
         }
 
-        private static void FindBestScaleAndPositionForAllScreens(List<Screen> setup, out int width, out int height)
+        private static void FindBestScaleAndPositionForAllScreens(List<Screen> setup)
         {
             int minppcm = setup.Min(x => x.Geometry.Ppcm);
             int maxvert = setup.Max(x => x.Mode.H);
@@ -160,8 +165,6 @@ namespace wloutput
                 setup[i].ScaleFilter = filter;
                 rightpos += screenWidth;
             }
-            width = rightpos;
-            height = maxvert;
         }
 
         private static string FindBackgroundImage()
