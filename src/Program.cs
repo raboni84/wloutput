@@ -4,7 +4,6 @@ using System.Drawing;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Text.Json;
 using toolbelt;
 
@@ -12,9 +11,6 @@ namespace wloutput
 {
     static class Program
     {
-        [DllImport("libX11")]
-        public static extern IntPtr XOpenDisplay(string display_name);
-        
         static readonly string X11ConfigFilename = $"{Environment.GetEnvironmentVariable("HOME")}/.config/wloutput.x11.json";
         static readonly string WaylandConfigFilename = $"{Environment.GetEnvironmentVariable("HOME")}/.config/wloutput.wl.json";
 
@@ -89,16 +85,23 @@ namespace wloutput
             }
         }
 
+        static Nullable<bool> IsX11 = null;
+
         private static bool IsX11Environment()
         {
             try
             {
-                IntPtr display = XOpenDisplay(null);
-                return display != IntPtr.Zero;
+                if (IsX11 == null)
+                {
+                    string res = ShellUtils.RunShellTextAsync("sh", "-c \"xset -q 2>&1 &>/dev/null && echo yes\"").Await();
+                    IsX11 = res == "yes\n";
+                }
+                return IsX11.Value;
             }
             catch (Exception)
             {
-                return false;
+                IsX11 = false;
+                return IsX11.Value;
             }
         }
 
