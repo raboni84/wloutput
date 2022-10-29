@@ -22,13 +22,13 @@ namespace wloutput
             List<Screen> setup = new List<Screen>();
             FindBestSetupForAllScreens(setup);
             FindBestScaleAndPositionForAllScreens(setup);
-            
+
             Config config;
             if (IsX11Environment())
                 config = ConfigParser.ParseJsonConfigFile<Config>(X11ConfigFilename);
             else
                 config = ConfigParser.ParseJsonConfigFile<Config>(WaylandConfigFilename);
-            
+
             if (config == null)
                 config = new Config();
             if (config.Screens == null)
@@ -47,7 +47,7 @@ namespace wloutput
                 ConfigParser.WriteJsonConfigFile<Config>(config, WaylandConfigFilename);
 
             CropBackgroundImageForAllScreens(background, setup);
-            
+
             foreach (var elem in setup)
             {
                 if (IsX11Environment())
@@ -82,6 +82,11 @@ namespace wloutput
                 }
                 Console.Error.WriteLine(cmd);
                 ShellUtils.RunShellAsync("xloadimage", cmd, outputStream: Console.OpenStandardError()).Await();
+            }
+            foreach (var elem in setup)
+            {
+                if (File.Exists(elem.Background) && elem.Background.StartsWith("/tmp/"))
+                    File.Delete(elem.Background);
             }
         }
 
